@@ -136,10 +136,24 @@ func streamDisplayDXGI(ctx context.Context, n int, framerate int, out *mjpeg.Str
 				continue
 			}
 			ddup.UpdatePointerInfo = drawCursor
-			bounds, err := ddup.GetBounds()
+			bounds, err := ddup.GetPhysicalBounds()
 			if err != nil {
 				return
 			}
+			logicalBounds, err := ddup.GetBounds()
+			if err != nil {
+				return
+			}
+
+			rotation, err := ddup.GetRotation()
+			if err != nil {
+				return
+			}
+			if rotation == 2 {
+				imgBuf = image.NewRGBA(logicalBounds)
+				outputduplication.Rotate90Clockwise(imgBuf, imgBuf)
+			}
+
 			if bounds != lastBounds {
 				lastBounds = bounds
 				imgBuf = image.NewRGBA(lastBounds)

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"log"
 
 	"unsafe"
 
@@ -44,6 +45,7 @@ type OutputDuplicator struct {
 	movedRects    []dxgi.DXGI_OUTDUPL_MOVE_RECT
 	acquiredFrame bool
 	needsSwizzle  bool // in case we use DuplicateOutput1, swizzle is not neccessery
+	rotation      int
 }
 
 func (dup *OutputDuplicator) initializeStage(texture *d3d11.ID3D11Texture2D) int32 {
@@ -255,12 +257,12 @@ func (dup *OutputDuplicator) GetImage(img *image.RGBA, timeoutMs uint) error {
 	contentWidth := int(size.X) * 4
 	dataWidth := int(mappedRect.Pitch)
 
-	var imgStart, dataStart, dataEnd int
+	imgStart, dataStart, dataEnd := 0, 0, 0
 	// copy source bytes into image.RGBA.Pix, skipping padding
 	for i := 0; i < int(size.Y); i++ {
 		dataEnd = dataStart + contentWidth
 		copy(img.Pix[imgStart:], data[dataStart:dataEnd])
-		imgStart += contentWidth
+		imgStart += img.Stride
 		dataStart += dataWidth
 	}
 
@@ -273,6 +275,46 @@ func (dup *OutputDuplicator) GetImage(img *image.RGBA, timeoutMs uint) error {
 	}
 
 	return nil
+}
+
+// rotate90Clockwise rotates src 90 degrees clockwise into dst
+// src dimensions: WxH, dst dimensions: HxW
+func Rotate90Clockwise(src, dst *image.RGBA) {
+	srcBounds := src.Bounds()
+	srcW := srcBounds.Dx()
+	srcH := srcBounds.Dy()
+
+	for y := 0; y < srcH; y++ {
+		for x := 0; x < srcW; x++ {
+			// Map (x, y) in src to (srcH-1-y, x) in dst
+			srcIdx := y*src.Stride + x*4
+			dstX := srcH - 1 - y
+			dstY := x
+			dstIdx := dstY*dst.Stride + dstX*4
+
+			copy(dst.Pix[dstIdx:dstIdx+4], src.Pix[srcIdx:srcIdx+4])
+		}
+	}
+}
+
+// rotate90CounterClockwise rotates src 90 degrees counter-clockwise into dst
+// src dimensions: WxH, dst dimensions: HxW
+func rotate90CounterClockwise(src, dst *image.RGBA) {
+	srcBounds := src.Bounds()
+	srcW := srcBounds.Dx()
+	srcH := srcBounds.Dy()
+
+	for y := 0; y < srcH; y++ {
+		for x := 0; x < srcW; x++ {
+			// Map (x, y) in src to (y, srcW-1-x) in dst
+			srcIdx := y*src.Stride + x*4
+			dstX := y
+			dstY := srcW - 1 - x
+			dstIdx := dstY*dst.Stride + dstX*4
+
+			copy(dst.Pix[dstIdx:dstIdx+4], src.Pix[srcIdx:srcIdx+4])
+		}
+	}
 }
 
 func (dup *OutputDuplicator) updatePointer(info *dxgi.DXGI_OUTDUPL_FRAME_INFO) error {
@@ -400,7 +442,52 @@ func (ddup *OutputDuplicator) GetBounds() (image.Rectangle, error) {
 		return image.Rectangle{}, fmt.Errorf("failed at dxgiOutput.GetDesc. %w", hr)
 	}
 
+	log.Printf("DXGI Output Rotation: %d", desc.Rotation)
 	return image.Rect(int(desc.DesktopCoordinates.Left), int(desc.DesktopCoordinates.Top), int(desc.DesktopCoordinates.Right), int(desc.DesktopCoordinates.Bottom)), nil
+}
+
+// GetRotation returns the rotation of the output
+// 0 = DXGI_MODE_ROTATION_IDENTITY (landscape)
+// 1 = DXGI_MODE_ROTATION_ROTATE90 (portrait, rotated 90 degrees clockwise)
+// 2 = DXGI_MODE_ROTATION_ROTATE180 (landscape, upside down)
+// 3 = DXGI_MODE_ROTATION_ROTATE270 (portrait, rotated 270 degrees clockwise / 90 degrees counter-clockwise)
+func (ddup *OutputDuplicator) GetRotation() (dxgi.DXGI_MODE_ROTATION, error) {
+	desc := dxgi.DXGI_OUTPUT_DESC{}
+	hr := ddup.dxgiOutput.GetDesc(&desc)
+	if hr := d3d.HRESULT(hr); hr.Failed() {
+		return 0, fmt.Errorf("failed at dxgiOutput.GetDesc. %w", hr)
+	}
+	return desc.Rotation, nil
+}
+
+// GetPhysicalBounds returns the bounds of the output image after rotation is applied.
+// For portrait monitors (rotation 1 or 3), dimensions are swapped since the image
+// will be rotated 90 degrees.
+func (ddup *OutputDuplicator) GetPhysicalBounds() (image.Rectangle, error) {
+	desc := dxgi.DXGI_OUTPUT_DESC{}
+	hr := ddup.dxgiOutput.GetDesc(&desc)
+	if hr := d3d.HRESULT(hr); hr.Failed() {
+		return image.Rectangle{}, fmt.Errorf("failed at dxgiOutput.GetDesc. %w", hr)
+	}
+
+	logicalBounds := image.Rect(
+		int(desc.DesktopCoordinates.Left),
+		int(desc.DesktopCoordinates.Top),
+		int(desc.DesktopCoordinates.Right),
+		int(desc.DesktopCoordinates.Bottom),
+	)
+
+	width := logicalBounds.Dx()
+	height := logicalBounds.Dy()
+
+	log.Printf("Landscape mode (rotation %d), output dimensions: %dx%d",
+		desc.Rotation, width, height)
+
+	// if rotation is 1 or 3, swap dimensions
+	if desc.Rotation == 2 {
+		width, height = height, width
+	}
+	return image.Rect(0, 0, width, height), nil
 }
 
 func newIDXGIOutputDuplicationFormat(device *d3d11.ID3D11Device, deviceCtx *d3d11.ID3D11DeviceContext, output uint, format dxgi.DXGI_FORMAT) (*OutputDuplicator, error) {
@@ -472,7 +559,13 @@ func newIDXGIOutputDuplicationFormat(device *d3d11.ID3D11Device, deviceCtx *d3d1
 		}
 	}
 
-	return &OutputDuplicator{device: device, deviceCtx: deviceCtx, outputDuplication: dup, needsSwizzle: needsSwizzle, dxgiOutput: dxgiOutput5}, nil
+	out := &OutputDuplicator{device: device, deviceCtx: deviceCtx, outputDuplication: dup, needsSwizzle: needsSwizzle, dxgiOutput: dxgiOutput5}
+	rotation, err := out.GetRotation()
+	if err != nil {
+		return nil, err
+	}
+	out.rotation = int(rotation)
+	return out, nil
 }
 
 // NewIDXGIOutputDuplication creates a new OutputDuplicator
