@@ -1,4 +1,4 @@
-module github.com/PerwatchAPP/go-d3d
+module github.com/kirides/go-d3d
 
 go 1.24
 

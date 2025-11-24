@@ -8,10 +8,10 @@ import (
 
 	"unsafe"
 
-	"github.com/PerwatchAPP/go-d3d"
-	"github.com/PerwatchAPP/go-d3d/d3d11"
-	"github.com/PerwatchAPP/go-d3d/dxgi"
-	"github.com/PerwatchAPP/go-d3d/outputduplication/swizzle"
+	"github.com/kirides/go-d3d"
+	"github.com/kirides/go-d3d/d3d11"
+	"github.com/kirides/go-d3d/dxgi"
+	"github.com/kirides/go-d3d/outputduplication/swizzle"
 )
 
 type PointerInfo struct {
