@@ -15,10 +15,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kirides/go-d3d/d3d11"
-	"github.com/kirides/go-d3d/examples/framelimiter"
-	"github.com/kirides/go-d3d/outputduplication"
-	"github.com/kirides/go-d3d/win"
+	"github.com/PerwatchAPP/go-d3d/d3d11"
+	"github.com/PerwatchAPP/go-d3d/examples/framelimiter"
+	"github.com/PerwatchAPP/go-d3d/outputduplication"
+	"github.com/PerwatchAPP/go-d3d/win"
 
 	"github.com/kbinani/screenshot"
 	"github.com/mattn/go-mjpeg"
