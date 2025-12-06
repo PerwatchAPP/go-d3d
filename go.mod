@@ -4,7 +4,6 @@ go 1.24
 
 require (
 	github.com/kbinani/screenshot v0.0.0-20250118074034-a3924b7bbc8c
-	github.com/kirides/go-d3d v1.0.1
 	github.com/mattn/go-mjpeg v0.0.3
 	github.com/viam-labs/go-libjpeg v0.3.1
 	golang.org/x/sys v0.33.0

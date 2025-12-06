@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"image"
 	"log"
-
 	"unsafe"
 
 	"github.com/kirides/go-d3d"
@@ -332,7 +331,8 @@ func (dup *OutputDuplicator) updatePointer(info *dxgi.DXGI_OUTDUPL_FRAME_INFO) e
 		var requiredSize uint32
 		var pointerInfo dxgi.DXGI_OUTDUPL_POINTER_SHAPE_INFO
 
-		hr := dup.outputDuplication.GetFramePointerShape(info.PointerShapeBufferSize,
+		hr := dup.outputDuplication.GetFramePointerShape(
+			info.PointerShapeBufferSize,
 			dup.pointerInfo.shapeInBuffer,
 			&requiredSize,
 			&pointerInfo,
@@ -341,7 +341,11 @@ func (dup *OutputDuplicator) updatePointer(info *dxgi.DXGI_OUTDUPL_FRAME_INFO) e
 			return fmt.Errorf("unable to obtain frame pointer shape")
 		}
 		neededSize := int(pointerInfo.Width) * int(pointerInfo.Height/2) * 4
-		dup.pointerInfo.shapeOutBuffer = image.NewRGBA(image.Rect(0, 0, int(pointerInfo.Width), int(pointerInfo.Height)))
+		dup.pointerInfo.shapeOutBuffer = image.NewRGBA(
+			image.Rect(
+				0, 0, int(pointerInfo.Width), int(pointerInfo.Height),
+			),
+		)
 		if len(dup.pointerInfo.shapeOutBuffer.Pix) < int(neededSize) {
 			dup.pointerInfo.shapeOutBuffer.Pix = make([]byte, neededSize)
 		}
@@ -443,7 +447,10 @@ func (ddup *OutputDuplicator) GetBounds() (image.Rectangle, error) {
 	}
 
 	log.Printf("DXGI Output Rotation: %d", desc.Rotation)
-	return image.Rect(int(desc.DesktopCoordinates.Left), int(desc.DesktopCoordinates.Top), int(desc.DesktopCoordinates.Right), int(desc.DesktopCoordinates.Bottom)), nil
+	return image.Rect(
+		int(desc.DesktopCoordinates.Left), int(desc.DesktopCoordinates.Top), int(desc.DesktopCoordinates.Right),
+		int(desc.DesktopCoordinates.Bottom),
+	), nil
 }
 
 // GetRotation returns the rotation of the output
@@ -480,17 +487,24 @@ func (ddup *OutputDuplicator) GetPhysicalBounds() (image.Rectangle, error) {
 	width := logicalBounds.Dx()
 	height := logicalBounds.Dy()
 
-	log.Printf("Landscape mode (rotation %d), output dimensions: %dx%d",
-		desc.Rotation, width, height)
+	log.Printf(
+		"Landscape mode (rotation %d), output dimensions: %dx%d",
+		desc.Rotation, width, height,
+	)
 
 	// if rotation is 1 or 3, swap dimensions
 	if desc.Rotation == 2 {
 		width, height = height, width
 	}
-	return image.Rect(0, 0, width, height), nil
+	return image.Rect(
+		int(desc.DesktopCoordinates.Left), int(desc.DesktopCoordinates.Top), int(width),
+		int(height),
+	), nil
 }
 
-func newIDXGIOutputDuplicationFormat(device *d3d11.ID3D11Device, deviceCtx *d3d11.ID3D11DeviceContext, output uint, format dxgi.DXGI_FORMAT) (*OutputDuplicator, error) {
+func newIDXGIOutputDuplicationFormat(
+	device *d3d11.ID3D11Device, deviceCtx *d3d11.ID3D11DeviceContext, output uint, format dxgi.DXGI_FORMAT,
+) (*OutputDuplicator, error) {
 	// DEBUG
 
 	var d3dDebug *d3d11.ID3D11Debug
@@ -537,9 +551,11 @@ func newIDXGIOutputDuplicationFormat(device *d3d11.ID3D11Device, deviceCtx *d3d1
 	}
 
 	var dup *dxgi.IDXGIOutputDuplication
-	hr = dxgiOutput5.DuplicateOutput1(dxgiDevice1, 0, []dxgi.DXGI_FORMAT{
-		format,
-	}, &dup)
+	hr = dxgiOutput5.DuplicateOutput1(
+		dxgiDevice1, 0, []dxgi.DXGI_FORMAT{
+			format,
+		}, &dup,
+	)
 	needsSwizzle := false
 	if hr := d3d.HRESULT(hr); hr.Failed() {
 		needsSwizzle = true
@@ -559,7 +575,10 @@ func newIDXGIOutputDuplicationFormat(device *d3d11.ID3D11Device, deviceCtx *d3d1
 		}
 	}
 
-	out := &OutputDuplicator{device: device, deviceCtx: deviceCtx, outputDuplication: dup, needsSwizzle: needsSwizzle, dxgiOutput: dxgiOutput5}
+	out := &OutputDuplicator{
+		device: device, deviceCtx: deviceCtx, outputDuplication: dup, needsSwizzle: needsSwizzle,
+		dxgiOutput: dxgiOutput5,
+	}
 	rotation, err := out.GetRotation()
 	if err != nil {
 		return nil, err
@@ -569,6 +588,8 @@ func newIDXGIOutputDuplicationFormat(device *d3d11.ID3D11Device, deviceCtx *d3d1
 }
 
 // NewIDXGIOutputDuplication creates a new OutputDuplicator
-func NewIDXGIOutputDuplication(device *d3d11.ID3D11Device, deviceCtx *d3d11.ID3D11DeviceContext, output uint) (*OutputDuplicator, error) {
+func NewIDXGIOutputDuplication(
+	device *d3d11.ID3D11Device, deviceCtx *d3d11.ID3D11DeviceContext, output uint,
+) (*OutputDuplicator, error) {
 	return newIDXGIOutputDuplicationFormat(device, deviceCtx, output, dxgi.DXGI_FORMAT_R8G8B8A8_UNORM)
 }
