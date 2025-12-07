@@ -454,10 +454,12 @@ func (ddup *OutputDuplicator) GetBounds() (image.Rectangle, error) {
 }
 
 // GetRotation returns the rotation of the output
-// 0 = DXGI_MODE_ROTATION_IDENTITY (landscape)
-// 1 = DXGI_MODE_ROTATION_ROTATE90 (portrait, rotated 90 degrees clockwise)
-// 2 = DXGI_MODE_ROTATION_ROTATE180 (landscape, upside down)
-// 3 = DXGI_MODE_ROTATION_ROTATE270 (portrait, rotated 270 degrees clockwise / 90 degrees counter-clockwise)
+// DXGI_MODE_ROTATION values:
+// 0 = DXGI_MODE_ROTATION_UNSPECIFIED
+// 1 = DXGI_MODE_ROTATION_IDENTITY (landscape, no rotation)
+// 2 = DXGI_MODE_ROTATION_ROTATE90 (portrait, rotated 90 degrees clockwise)
+// 3 = DXGI_MODE_ROTATION_ROTATE180 (landscape, upside down)
+// 4 = DXGI_MODE_ROTATION_ROTATE270 (portrait, rotated 270 degrees clockwise / 90 degrees counter-clockwise)
 func (ddup *OutputDuplicator) GetRotation() (dxgi.DXGI_MODE_ROTATION, error) {
 	desc := dxgi.DXGI_OUTPUT_DESC{}
 	hr := ddup.dxgiOutput.GetDesc(&desc)
@@ -468,7 +470,7 @@ func (ddup *OutputDuplicator) GetRotation() (dxgi.DXGI_MODE_ROTATION, error) {
 }
 
 // GetPhysicalBounds returns the bounds of the output image after rotation is applied.
-// For portrait monitors (rotation 1 or 3), dimensions are swapped since the image
+// For portrait monitors (rotation 2=90° or 4=270°), dimensions are swapped since the image
 // will be rotated 90 degrees.
 func (ddup *OutputDuplicator) GetPhysicalBounds() (image.Rectangle, error) {
 	desc := dxgi.DXGI_OUTPUT_DESC{}
@@ -492,13 +494,23 @@ func (ddup *OutputDuplicator) GetPhysicalBounds() (image.Rectangle, error) {
 		desc.Rotation, width, height,
 	)
 
-	// if rotation is 1 or 3, swap dimensions
-	if desc.Rotation == 2 {
+	// if rotation is 1 or 3, swap dimensions (these are portrait modes)
+	// DXGI_MODE_ROTATION values: 0=unspecified, 1=identity(0°), 2=90°, 3=180°, 4=270°
+	// However, the enum starts at 1 for identity, so:
+	// 1 = IDENTITY (landscape), 2 = ROTATE90 (portrait), 3 = ROTATE180 (landscape), 4 = ROTATE270 (portrait)
+	// Swap dimensions for 90° and 270° rotations (values 2 and 4)
+	if desc.Rotation == 2 || desc.Rotation == 4 {
 		width, height = height, width
 	}
+
+	// Return bounds using the monitor's position (Left, Top) plus its dimensions (width, height)
+	// Previously this was using (Left, Top, width, height) which is wrong because
+	// image.Rect expects (Left, Top, Right, Bottom) where Right = Left + Width
 	return image.Rect(
-		int(desc.DesktopCoordinates.Left), int(desc.DesktopCoordinates.Top), int(width),
-		int(height),
+		int(desc.DesktopCoordinates.Left),
+		int(desc.DesktopCoordinates.Top),
+		int(desc.DesktopCoordinates.Left)+width,
+		int(desc.DesktopCoordinates.Top)+height,
 	), nil
 }
 
