@@ -472,11 +472,11 @@ func (ddup *OutputDuplicator) GetRotation() (dxgi.DXGI_MODE_ROTATION, error) {
 // GetPhysicalBounds returns the bounds of the output image after rotation is applied.
 // For portrait monitors (rotation 2=90° or 4=270°), dimensions are swapped since the image
 // will be rotated 90 degrees.
-func (ddup *OutputDuplicator) GetPhysicalBounds() (image.Rectangle, error) {
+func (ddup *OutputDuplicator) GetPhysicalBounds() (image.Rectangle, bool, error) {
 	desc := dxgi.DXGI_OUTPUT_DESC{}
 	hr := ddup.dxgiOutput.GetDesc(&desc)
 	if hr := d3d.HRESULT(hr); hr.Failed() {
-		return image.Rectangle{}, fmt.Errorf("failed at dxgiOutput.GetDesc. %w", hr)
+		return image.Rectangle{}, false, fmt.Errorf("failed at dxgiOutput.GetDesc. %w", hr)
 	}
 
 	logicalBounds := image.Rect(
@@ -493,7 +493,7 @@ func (ddup *OutputDuplicator) GetPhysicalBounds() (image.Rectangle, error) {
 		"Landscape mode (rotation %d), output dimensions: %dx%d",
 		desc.Rotation, width, height,
 	)
-
+	var isRotated bool
 	// if rotation is 1 or 3, swap dimensions (these are portrait modes)
 	// DXGI_MODE_ROTATION values: 0=unspecified, 1=identity(0°), 2=90°, 3=180°, 4=270°
 	// However, the enum starts at 1 for identity, so:
@@ -501,6 +501,7 @@ func (ddup *OutputDuplicator) GetPhysicalBounds() (image.Rectangle, error) {
 	// Swap dimensions for 90° and 270° rotations (values 2 and 4)
 	if desc.Rotation == 2 || desc.Rotation == 4 {
 		width, height = height, width
+		isRotated = true
 	}
 
 	// Return bounds using the monitor's position (Left, Top) plus its dimensions (width, height)
@@ -511,7 +512,7 @@ func (ddup *OutputDuplicator) GetPhysicalBounds() (image.Rectangle, error) {
 		int(desc.DesktopCoordinates.Top),
 		int(desc.DesktopCoordinates.Left)+width,
 		int(desc.DesktopCoordinates.Top)+height,
-	), nil
+	), isRotated, nil
 }
 
 func newIDXGIOutputDuplicationFormat(
